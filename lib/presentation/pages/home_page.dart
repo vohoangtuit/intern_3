@@ -1,16 +1,11 @@
 // ignore_for_file: use_build_context_synchronously
 
-import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:core_ui/core_ui.dart';
 import 'package:auth/auth.dart';
 import 'package:core/core.dart';
-import 'package:videocall/src/presentation/bloc/video_call_bloc.dart';
-import 'package:videocall/src/presentation/bloc/video_call_state.dart';
-import 'package:videocall/src/presentation/bloc/video_call_event.dart';
-import 'package:videocall/src/presentation/widgets/incoming_call_dialog.dart';
-import 'package:videocall/src/presentation/screens/calling_screen.dart';
-import 'package:videocall/src/infrastructure/config/agora_config.dart';
+import 'package:core_ui/core_ui.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:videocall/videocall.dart';
 
 /// Home page displayed after user login (login functionality to be implemented later)
 /// Displays the main bottom navigation bar with dynamic top bar title
@@ -60,47 +55,44 @@ class _HomePageState extends State<HomePage> {
     return BlocListener<VideoCallBloc, VideoCallState>(
       listener: (context, state) {
         if (state is IncomingCall) {
-          // Show incoming call dialog
-          IncomingCallDialog.show(
-            context: context,
-            callerName: state.callerName,
-            callerAvatar: state.callerAvatar,
-            onAccept: () {
-              // Accept call and navigate to calling screen
-              context.read<VideoCallBloc>().add(AcceptCall(state.callId));
-              
-              // Initialize and join the call
-              context.read<VideoCallBloc>().add(InitializeVideoCall(
-                channelName: state.channelName,
-                token: AgoraConfig.tempToken,
-                uid: '', // Will be set from current user
-              ));
-              context.read<VideoCallBloc>().add(JoinVideoCall());
-              
-              // Navigate to calling screen
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) => CallingScreen(
-                    callerName: state.callerName,
-                    callerAvatar: state.callerAvatar,
-                    isMuted: false,
-                    isCameraOff: false,
-                    isFrontCamera: true,
-                    onToggleMute: () => context.read<VideoCallBloc>().add(ToggleMute()),
-                    onToggleCamera: () => context.read<VideoCallBloc>().add(ToggleVideo()),
-                    onSwitchCamera: () => context.read<VideoCallBloc>().add(SwitchCamera()),
-                    onHangUp: () {
-                      context.read<VideoCallBloc>().add(LeaveVideoCall());
-                      Navigator.of(context).pop();
-                    },
-                  ),
-                ),
-              );
-            },
-            onDecline: () {
-              // Reject call
-              context.read<VideoCallBloc>().add(RejectCall(state.callId));
-            },
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => IncomingCallScreen(
+                callerName: state.callerName,
+                callerAvatar: state.callerAvatar,
+                onAccept: () {
+                  context.read<VideoCallBloc>().add(AcceptCall(state.callId));
+                  context.read<VideoCallBloc>().add(InitializeVideoCall(
+                    channelName: state.channelName,
+                    token: AgoraConfig.tempToken,
+                    uid: '',
+                  ));
+                  context.read<VideoCallBloc>().add(JoinVideoCall());
+                  Navigator.of(context).pushReplacement(
+                    MaterialPageRoute(
+                      builder: (context) => CallingScreen(
+                        callerName: state.callerName,
+                        callerAvatar: state.callerAvatar,
+                        isMuted: false,
+                        isCameraOff: false,
+                        isFrontCamera: true,
+                        onToggleMute: () => context.read<VideoCallBloc>().add(ToggleMute()),
+                        onToggleCamera: () => context.read<VideoCallBloc>().add(ToggleVideo()),
+                        onSwitchCamera: () => context.read<VideoCallBloc>().add(SwitchCamera()),
+                        onHangUp: () {
+                          context.read<VideoCallBloc>().add(LeaveVideoCall());
+                          Navigator.of(context).pop();
+                        },
+                      ),
+                    ),
+                  );
+                },
+                onDecline: () {
+                  context.read<VideoCallBloc>().add(RejectCall(state.callId));
+                  Navigator.of(context).pop();
+                },
+              ),
+            ),
           );
         }
       },

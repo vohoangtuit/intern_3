@@ -1,8 +1,6 @@
-import 'package:flutter/foundation.dart';
 import '../../data/repositories/video_call_repository.dart';
 import '../config/agora_config.dart';
 import 'agora_service.dart';
-import 'fcm_service.dart';
 import 'permission_service.dart';
 import 'package:auth/auth.dart';
 
@@ -40,7 +38,7 @@ class VideoCallService {
     // Generate token (for now use temp token, in production call server API)
     final token = await _generateToken(channelName, callerId);
 
-    // Create call in database
+    // Create call in database (this will trigger Cloud Function to send FCM)
     final callId = await repository.createCall(
       callerId: callerId,
       callerName: callerName,
@@ -52,53 +50,10 @@ class VideoCallService {
       token: token,
     );
 
-    // Send FCM notification to receiver
-    await _sendIncomingCallNotification(
-      receiverId: receiverId,
-      callerId: callerId,
-      callerName: callerName,
-      channelName: channelName,
-      callId: callId,
-    );
+    // Note: FCM notification is automatically sent by Cloud Function
+    // when the call record is created in the database
 
     return callId;
-  }
-
-  /// Send FCM notification for incoming call
-  Future<void> _sendIncomingCallNotification({
-    required String receiverId,
-    required String callerId,
-    required String callerName,
-    required String channelName,
-    required String callId,
-  }) async {
-    try {
-      // Get receiver's FCM token
-      final receiverResult = await authRepository.getUserById(receiverId);
-      await receiverResult.fold(
-        (failure) async {
-          // Handle error - could not get receiver data
-          debugPrint('Failed to get receiver data: $failure');
-        },
-        (receiver) async {
-          final receiverToken = receiver.fcmToken;
-          if (receiverToken != null && receiverToken.isNotEmpty) {
-            // Send FCM notification
-            await FCMService.instance.sendIncomingCallNotification(
-              receiverToken: receiverToken,
-              callerId: callerId,
-              callerName: callerName,
-              channelName: channelName,
-              callId: callId,
-            );
-          } else {
-            debugPrint('Receiver FCM token not available');
-          }
-        },
-      );
-    } catch (e) {
-      debugPrint('Error sending FCM notification: $e');
-    }
   }
 
   /// Generate token for channel (placeholder for server-side generation)

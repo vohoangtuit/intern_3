@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../datasources/video_call_firebase_data_source.dart';
 import '../models/video_call.dart';
 
@@ -25,6 +26,7 @@ abstract class VideoCallRepository {
 
 class VideoCallRepositoryImpl implements VideoCallRepository {
   final VideoCallFirebaseDataSource dataSource;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   VideoCallRepositoryImpl(this.dataSource);
 
@@ -52,8 +54,20 @@ class VideoCallRepositoryImpl implements VideoCallRepository {
       channelName: channelName,
       token: token,
     );
+    final callId = await dataSource.createCall(call);
 
-    return await dataSource.createCall(call);
+    // Mirror call document in Firestore for verification/handshake
+    try {
+      final json = call.copyWith(callId: callId, startAt: DateTime.now()).toJson();
+      await _firestore.collection('calls').doc(callId).set({
+        ...json,
+        'startAt': FieldValue.serverTimestamp(),
+      });
+    } catch (_) {
+      // Keep RTDB flow working even if Firestore write fails
+    }
+
+    return callId;
   }
 
   @override
@@ -63,6 +77,13 @@ class VideoCallRepositoryImpl implements VideoCallRepository {
       'status': 'accepted',
     };
     await dataSource.updateCall(callId, updates);
+    // Reflect in Firestore
+    try {
+      await _firestore.collection('calls').doc(callId).update({
+        'acceptAt': FieldValue.serverTimestamp(),
+        'status': 'accepted',
+      });
+    } catch (_) {}
   }
 
   @override
@@ -72,6 +93,12 @@ class VideoCallRepositoryImpl implements VideoCallRepository {
       'status': 'rejected',
     };
     await dataSource.updateCall(callId, updates);
+    try {
+      await _firestore.collection('calls').doc(callId).update({
+        'rejectAt': FieldValue.serverTimestamp(),
+        'status': 'rejected',
+      });
+    } catch (_) {}
   }
 
   @override
@@ -81,6 +108,12 @@ class VideoCallRepositoryImpl implements VideoCallRepository {
       'status': 'ended',
     };
     await dataSource.updateCall(callId, updates);
+    try {
+      await _firestore.collection('calls').doc(callId).update({
+        'endAt': FieldValue.serverTimestamp(),
+        'status': 'ended',
+      });
+    } catch (_) {}
   }
 
   @override

@@ -5,13 +5,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:auth/auth.dart';
 import 'package:core/core.dart';
 import 'package:core_ui/core_ui.dart';
-import 'package:videocall/src/infrastructure/services/fcm_token_manager.dart';
-import 'package:videocall/src/presentation/bloc/video_call_bloc.dart';
-import 'package:videocall/src/infrastructure/services/video_call_service.dart';
-import 'package:videocall/src/data/repositories/video_call_repository.dart';
-import 'package:videocall/src/data/datasources/video_call_firebase_data_source.dart';
-import 'package:videocall/src/infrastructure/services/agora_service.dart';
 import 'package:firebase_database/firebase_database.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:videocall/videocall.dart';
 import 'config/firebase_options.dart';
 import 'presentation/pages/home_page.dart';
 
@@ -57,6 +53,62 @@ class MyApp extends StatelessWidget {
     final authRepository = FirebaseAuthRepository();
     final videoCallService = VideoCallService(repository, agoraService, authRepository);
     final videoCallBloc = VideoCallBloc(videoCallService);
+
+    // Subscribe to FCM notification stream and forward incoming calls to Bloc
+    FCMService.instance.notificationStream.listen((data) async {
+      if (data['type'] == 'incoming_call') {
+        final callId = data['callId'] as String?;
+        if (callId == null) return;
+
+        // Prefer channelName/token from payload (if Cloud Functions supplied)
+        var channelName = data['channelName'] as String?;
+        var callerId = data['callerId'] as String?;
+        var callerName = data['callerName'] as String?;
+        var callerAvatar = data['callerAvatar'] as String?;
+
+        // If channel info missing, try to fetch from Firestore then RTDB as fallback
+        if (channelName == null || channelName.isEmpty) {
+          try {
+            final fs = FirebaseFirestore.instance;
+            final doc = await fs.collection('calls').doc(callId).get();
+            final data = doc.data();
+            if (data != null) {
+              channelName = (data['channelName'] as String?) ?? channelName;
+              callerId = (data['callerId'] as String?) ?? callerId;
+              callerName = (data['callerName'] as String?) ?? callerName;
+              callerAvatar = (data['callerAvatar'] as String?) ?? callerAvatar;
+            }
+          } catch (_) {}
+          if (channelName == null || channelName.isEmpty) {
+            try {
+              final rtdb = FirebaseDatabase.instance;
+              final snap = await rtdb.ref('calls/$callId').get();
+              if (snap.exists) {
+                final m = Map<String, dynamic>.from(snap.value as Map);
+                channelName = (m['channelName'] as String?) ?? channelName;
+                callerId = (m['callerId'] as String?) ?? callerId;
+                callerName = (m['callerName'] as String?) ?? callerName;
+                callerAvatar = (m['callerAvatar'] as String?) ?? callerAvatar;
+              }
+            } catch (_) {}
+          }
+
+        }
+
+        if (channelName != null &&
+            callerId != null &&
+            callerName != null &&
+            callerAvatar != null) {
+          VideoCallBloc.handleIncomingCall({
+            'callId': callId,
+            'callerId': callerId,
+            'callerName': callerName,
+            'callerAvatar': callerAvatar,
+            'channelName': channelName,
+          });
+        }
+      }
+    });
 
     return MultiRepositoryProvider(
       providers: [

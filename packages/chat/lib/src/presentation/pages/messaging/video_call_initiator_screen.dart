@@ -1,19 +1,12 @@
-// ignore_for_file: implementation_imports
+// ignore_for_file: use_build_context_synchronously
 
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:videocall/src/presentation/bloc/video_call_bloc.dart';
-import 'package:videocall/src/presentation/bloc/video_call_event.dart';
-import 'package:videocall/src/presentation/bloc/video_call_state.dart';
-import 'package:videocall/src/presentation/screens/calling_screen.dart';
-import 'package:videocall/src/presentation/screens/waiting_screen.dart';
-import 'package:videocall/src/infrastructure/services/video_call_service.dart';
-import 'package:videocall/src/data/repositories/video_call_repository.dart';
-import 'package:firebase_database/firebase_database.dart';
-import 'package:videocall/src/data/datasources/video_call_firebase_data_source.dart';
-import 'package:videocall/src/infrastructure/services/agora_service.dart' as agora_service;
-import 'package:videocall/src/infrastructure/config/agora_config.dart';
+import 'package:videocall/videocall.dart';
 import 'package:auth/auth.dart';
+import 'package:firebase_database/firebase_database.dart';
+
 
 class VideoCallInitiatorScreen extends StatefulWidget {
   final String callId;
@@ -42,87 +35,98 @@ class VideoCallInitiatorScreen extends StatefulWidget {
 class _VideoCallInitiatorScreenState extends State<VideoCallInitiatorScreen> {
   late VideoCallBloc _videoCallBloc;
   late VideoCallService _videoCallService;
+  Timer? _callTimeoutTimer;
 
   @override
   void initState() {
     super.initState();
 
-    // Initialize services
-    final database = FirebaseDatabase.instance;
-    final dataSource = VideoCallFirebaseDataSource(database);
-    final repository = VideoCallRepositoryImpl(dataSource);
-    final agoraService = agora_service.AgoraServiceImpl();
-    final authRepository = FirebaseAuthRepository();
-    _videoCallService = VideoCallService(repository, agoraService, authRepository);
+  // Initialize services (RTDB path aligned to /calls by data source)
+  final database = FirebaseDatabase.instance;
+  final dataSource = VideoCallFirebaseDataSource(database);
+  final repository = VideoCallRepositoryImpl(dataSource);
+  final agoraService = AgoraServiceImpl();
+  final authRepository = FirebaseAuthRepository();
+  _videoCallService = VideoCallService(repository, agoraService, authRepository);
 
     // Initialize BLoC
     _videoCallBloc = VideoCallBloc(_videoCallService);
 
-    // Start the call
-    _initiateCall();
+    // Navigate to CallingScreen immediately and start the call process
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => BlocProvider.value(
+              value: _videoCallBloc,
+              child: CallingScreen(
+                callerName: widget.receiverName,
+                callerAvatar: widget.receiverAvatar,
+                isMuted: false,
+                isCameraOff: false,
+                isFrontCamera: true,
+                isRinging: true, // Start in ringing state
+                onToggleMute: () => _videoCallBloc.add(ToggleMute()),
+                onToggleCamera: () => _videoCallBloc.add(ToggleVideo()),
+                onSwitchCamera: () => _videoCallBloc.add(SwitchCamera()),
+                onHangUp: () {
+                  if (!_videoCallBloc.isClosed) {
+                    _videoCallBloc.add(LeaveVideoCall());
+                  }
+                },
+              ),
+            ),
+          ),
+        );
+        _initiateCall();
+      }
+    });
   }
 
   Future<void> _initiateCall() async {
     try {
       // Check if Agora is properly configured
       if (!AgoraConfig.isConfigured) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Video call is not configured. Please set up Agora credentials first.'),
-                duration: Duration(seconds: 5),
-              ),
-            );
-            Navigator.of(context).pop();
-          }
-        });
+        _showErrorAndPop('Video call is not configured. Please set up Agora credentials first.');
         return;
       }
 
       // Check if temporary token might be expired
       if (AgoraConfig.isTempTokenExpired) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Video call token has expired. Please generate a new token from Agora Console and update AgoraConfig.tempToken'),
-                duration: Duration(seconds: 8),
-              ),
-            );
-            Navigator.of(context).pop();
-          }
-        });
+        _showErrorAndPop('Video call token has expired. Please generate a new token.');
         return;
       }
 
-      // Show loading state
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Initializing video call...')),
-          );
+      final hasPermissions = await _videoCallService.checkAndRequestPermissions();
+      if (!hasPermissions) {
+        _showErrorAndPop('Camera and microphone permissions are required.');
+        return;
+      }
+
+      // Initiate call (create DB record and trigger FCM)
+      final callId = await _videoCallService.initiateCall(
+        callerId: widget.currentUserId,
+        callerName: widget.currentUserName,
+        callerAvatar: widget.currentUserAvatar,
+        receiverId: widget.receiverId,
+        receiverName: widget.receiverName,
+        receiverAvatar: widget.receiverAvatar,
+      );
+      debugPrint('Call initiated with ID: $callId');
+
+      // Set up call timeout (30 seconds)
+      _callTimeoutTimer = Timer(const Duration(seconds: 30), () {
+        if (mounted && !_videoCallBloc.isClosed) {
+          _videoCallBloc.add(LeaveVideoCall());
+          _showErrorAndPop('Call timeout - no answer');
         }
       });
 
-      final hasPermissions = await _videoCallService.checkAndRequestPermissions();
-      if (!mounted) return;
-      if (!hasPermissions) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Camera and microphone permissions are required')),
-            );
-            Navigator.of(context).pop();
-          }
-        });
-        return;
-      }
-
       // Initialize video call
       _videoCallBloc.add(InitializeVideoCall(
-        channelName: AgoraConfig.testChannelName, // Use fixed channel name "video_call"
-        token: AgoraConfig.tempToken, // Use temporary token for testing
+        channelName: AgoraConfig.testChannelName,
+        token: AgoraConfig.tempToken,
         uid: widget.currentUserId,
       ));
 
@@ -130,76 +134,30 @@ class _VideoCallInitiatorScreenState extends State<VideoCallInitiatorScreen> {
       _videoCallBloc.add(JoinVideoCall());
     } catch (e) {
       debugPrint('Error initiating call: $e');
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to start call: $e')),
-          );
-          Navigator.of(context).pop();
-        }
-      });
+      _showErrorAndPop('Failed to start call: $e');
+    }
+  }
+
+  void _showErrorAndPop(String message) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      Navigator.of(context).pop();
     }
   }
 
   @override
   void dispose() {
+    _callTimeoutTimer?.cancel();
     _videoCallBloc.close();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider.value(
-      value: _videoCallBloc,
-      child: BlocBuilder<VideoCallBloc, VideoCallState>(
-        builder: (context, state) {
-          if (state is VideoCallInitial || state is VideoCallLoading) {
-            return WaitingScreen(
-              callerName: widget.receiverName,
-              callerAvatar: widget.receiverAvatar,
-              onHangUp: () => Navigator.of(context).pop(),
-            );
-          } else if (state is VideoCallJoined) {
-            return CallingScreen(
-              callerName: widget.receiverName,
-              callerAvatar: widget.receiverAvatar,
-              isMuted: state.isMuted,
-              isCameraOff: !state.isVideoOn,
-              isFrontCamera: state.isFrontCamera,
-              onToggleMute: () => _videoCallBloc.add(ToggleMute()),
-              onToggleCamera: () => _videoCallBloc.add(ToggleVideo()),
-              onSwitchCamera: () => _videoCallBloc.add(SwitchCamera()),
-              onHangUp: () {
-                _videoCallBloc.add(LeaveVideoCall());
-                Navigator.of(context).pop();
-              },
-            );
-          } else if (state is VideoCallError) {
-            return Scaffold(
-              body: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.error, size: 64, color: Colors.red),
-                    const SizedBox(height: 16),
-                    Text('Call Error: ${state.error}'),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      child: const Text('Back'),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          } else {
-            return WaitingScreen(
-              callerName: widget.receiverName,
-              callerAvatar: widget.receiverAvatar,
-              onHangUp: () => Navigator.of(context).pop(),
-            );
-          }
-        },
+    // This screen will be replaced immediately, so we can just show a loader.
+    return const Scaffold(
+      body: Center(
+        child: CircularProgressIndicator(),
       ),
     );
   }

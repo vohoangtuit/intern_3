@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:agora_rtc_engine/agora_rtc_engine.dart';
+import 'package:flutter/widgets.dart';
 import '../config/agora_config.dart';
 
 /// Service for managing Agora RTC Engine operations
@@ -42,6 +43,12 @@ abstract class AgoraService {
 
   /// Stream of video/audio state changes
   Stream<Map<String, dynamic>> get mediaStateStream;
+
+  /// Build local preview view
+  Widget localVideoView();
+
+  /// Build remote view for a given user and channel
+  Widget remoteVideoView(int uid, String channelId);
 }
 
 /// Implementation of AgoraService using Agora SDK
@@ -129,6 +136,16 @@ class AgoraServiceImpl implements AgoraService {
           default:
             _updateConnectionState(VideoCallConnectionState.disconnected);
         }
+      },
+
+      // Handle token expiration
+      onTokenPrivilegeWillExpire: (RtcConnection connection, String token) {
+        debugPrint('Agora token will expire soon. Token: ${token.substring(0, 20)}...');
+        // Emit media state change to notify UI
+        _mediaStateController.add({
+          'type': 'token_expiring',
+          'token': token,
+        });
       },
     ));
   }
@@ -270,6 +287,30 @@ class AgoraServiceImpl implements AgoraService {
     _connectionState = state;
     _connectionController.add(state);
   }
+
+  @override
+  Widget localVideoView() {
+    if (_engine == null) {
+      return Container(color: const Color(0xFF000000));
+    }
+    return AgoraVideoView(
+      controller: VideoViewController(rtcEngine: _engine!, canvas: const VideoCanvas(uid: 0)),
+    );
+  }
+
+  @override
+  Widget remoteVideoView(int uid, String channelId) {
+    if (_engine == null) {
+      return Container(color: const Color(0xFF111111));
+    }
+    return AgoraVideoView(
+      controller: VideoViewController.remote(
+        rtcEngine: _engine!,
+        canvas: VideoCanvas(uid: uid),
+        connection: RtcConnection(channelId: channelId),
+      ),
+    );
+  }
 }
 
 /// Mock implementation for testing and development
@@ -370,5 +411,15 @@ class MockAgoraService implements AgoraService {
   void _updateConnectionState(VideoCallConnectionState state) {
     _connectionState = state;
     _connectionController.add(state);
+  }
+
+  @override
+  Widget localVideoView() {
+    return Container(color: const Color(0xFF000000));
+  }
+
+  @override
+  Widget remoteVideoView(int uid, String channelId) {
+    return Container(color: const Color(0xFF111111));
   }
 }

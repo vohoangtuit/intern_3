@@ -18,7 +18,8 @@ class VideoCallFirebaseDataSource implements VideoCallDataSource {
   @override
   Future<String> createCall(VideoCall call) async {
     try {
-      final callRef = _database.ref('video_calls').push();
+  // Align RTDB path with Cloud Functions trigger at /calls/{callId}
+  final callRef = _database.ref('calls').push();
       final callId = callRef.key!;
 
       final callData = call.copyWith(callId: callId).toJson();
@@ -33,7 +34,7 @@ class VideoCallFirebaseDataSource implements VideoCallDataSource {
   @override
   Future<void> updateCall(String callId, Map<String, dynamic> updates) async {
     try {
-      await _database.ref('video_calls/$callId').update(updates);
+  await _database.ref('calls/$callId').update(updates);
     } catch (e) {
       throw Exception('Failed to update call: $e');
     }
@@ -42,7 +43,7 @@ class VideoCallFirebaseDataSource implements VideoCallDataSource {
   @override
   Future<VideoCall?> getCall(String callId) async {
     try {
-      final snapshot = await _database.ref('video_calls/$callId').get();
+  final snapshot = await _database.ref('calls/$callId').get();
       if (snapshot.exists) {
         final data = Map<String, dynamic>.from(snapshot.value as Map);
         return VideoCall.fromJson(data);
@@ -56,7 +57,7 @@ class VideoCallFirebaseDataSource implements VideoCallDataSource {
   @override
   Future<void> deleteCall(String callId) async {
     try {
-      await _database.ref('video_calls/$callId').remove();
+  await _database.ref('calls/$callId').remove();
     } catch (e) {
       throw Exception('Failed to delete call: $e');
     }
@@ -65,7 +66,7 @@ class VideoCallFirebaseDataSource implements VideoCallDataSource {
   @override
   Stream<VideoCall?> watchCall(String callId) {
     return _database
-        .ref('video_calls/$callId')
+        .ref('calls/$callId')
         .onValue
         .map((event) {
           if (event.snapshot.exists) {
@@ -79,7 +80,7 @@ class VideoCallFirebaseDataSource implements VideoCallDataSource {
   @override
   Stream<List<VideoCall>> watchIncomingCalls(String userId) {
     return _database
-        .ref('video_calls')
+        .ref('calls')
         .orderByChild('receiverId')
         .equalTo(userId)
         .onValue

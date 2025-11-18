@@ -19,6 +19,7 @@ dependencies:
   equatable: ^2.0.5
   firebase_core: ^2.32.0
   firebase_database: ^10.5.0
+  cloud_firestore: ^4.17.5
   agora_rtc_engine: ^6.5.3
   permission_handler: ^11.3.1
   http: ^1.2.1

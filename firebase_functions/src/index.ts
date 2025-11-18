@@ -38,10 +38,12 @@ export const sendCallNotification = functions.database
         return null;
       }
 
-      const receiverId = callData.receiverId;
+  const receiverId = callData.receiverId;
       const callerName = callData.callerName || "Someone";
       const callerAvatar = callData.callerAvatar || "";
       const callerId = callData.callerId;
+  const channelName = callData.channelName || "video_call";
+  const token = callData.token || "";
 
       if (!receiverId) {
         console.error("❌ No receiver ID found");
@@ -86,6 +88,8 @@ export const sendCallNotification = functions.database
           callerId: callerId,
           callerName: callerName,
           callerAvatar: callerAvatar,
+          channelName: channelName,
+          token: token,
           click_action: "FLUTTER_NOTIFICATION_CLICK",
         },
         // Android specific options

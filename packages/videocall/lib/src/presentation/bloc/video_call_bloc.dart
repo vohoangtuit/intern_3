@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../infrastructure/services/video_call_service.dart';
 import '../../infrastructure/config/agora_config.dart';
@@ -33,6 +34,9 @@ class VideoCallBloc extends Bloc<VideoCallEvent, VideoCallState> {
     on<AcceptCall>(_onAcceptCall);
     on<RejectCall>(_onRejectCall);
     on<IncomingCallReceived>(_onIncomingCallReceived);
+
+    // Listen to media state changes (including token expiration)
+    _mediaStateSubscription = videoCallService.agoraService.mediaStateStream.listen(_handleMediaStateChange);
   }
 
   Future<void> _onInitializeVideoCall(
@@ -190,6 +194,22 @@ class VideoCallBloc extends Bloc<VideoCallEvent, VideoCallState> {
     Emitter<VideoCallState> emit,
   ) async {
     emit(VideoCallError(event.error));
+  }
+
+  /// Handle media state changes from Agora service
+  void _handleMediaStateChange(Map<String, dynamic> state) {
+    final type = state['type'] as String?;
+    
+    switch (type) {
+      case 'token_expiring':
+        debugPrint('Token is expiring, need to refresh token');
+        // TODO: Implement token refresh logic
+        // This should call a server API to get new token and renew it
+        break;
+      default:
+        // Handle other media state changes if needed
+        break;
+    }
   }
 
   /// Static method to handle incoming call from FCM
