@@ -8,7 +8,7 @@ class AgoraConfig {
 
   // Token riêng cho channel "livestream" (tạm thời không expire cho testing - 24h)
   static const String livestreamChannelToken =
-      '007eJxTYJA2n1665X3N8xnlk/eeY1ohW9VkNbEsdVkr7//kLClpnw8KDIZJiZamBuaJFqaJZiamFolJpqZmRiamJgYWKUnmhgaJS/I5MxsCGRlO1OUxMzJAIIjPxZCTWZZaXFKUmpjLwAAA6cghAg==';
+      '007eJxTYPiv2SFRWvxYcXLWqVtnbytHLNh76UbCpyYfkYorFdufSZ9TYEhJNkw2SzMwMDdJTjKxTEq1MDBKTUmxNE1NTTY1NTQznGlhmNkQyMjAlRnLyMgAgWA+Q05mWWpxSVFqYi4DAwDTZiOH';
 
   // Token server URL (if using token authentication)
   static const String tokenServerUrl = '';
