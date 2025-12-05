@@ -47,6 +47,7 @@ dependencies:
     path: packages/videocall
   uploads:
     path: packages/uploads
+  flutter_local_notifications: ^19.5.0
 
 dev_dependencies:
   flutter_test:

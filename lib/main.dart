@@ -8,6 +8,7 @@ import 'package:core_ui/core_ui.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:videocall/videocall.dart';
+import 'package:livestream/livestream.dart' as livestream;
 import 'config/firebase_options.dart';
 import 'presentation/pages/home_page.dart';
 
@@ -16,6 +17,8 @@ import 'presentation/pages/home_page.dart';
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 }
+
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -105,6 +108,77 @@ class MyApp extends StatelessWidget {
             'channelName': channelName,
           });
         }
+      } else if (data['type'] == 'call_action') {
+        final action = data['action'];
+        final callId = data['callId'] as String?;
+        if (callId == null) return;
+
+        if (action == 'accept') {
+          var channelName = data['channelName'] as String?;
+          var callerName = data['callerName'] as String? ?? 'Unknown';
+          var callerAvatar = data['callerAvatar'] as String? ?? '';
+
+          // If channel info missing, try to fetch from Firestore then RTDB as fallback
+          if (channelName == null || channelName.isEmpty) {
+            try {
+              final fs = FirebaseFirestore.instance;
+              final doc = await fs.collection('calls').doc(callId).get();
+              final data = doc.data();
+              if (data != null) {
+                channelName = (data['channelName'] as String?) ?? channelName;
+                callerName = (data['callerName'] as String?) ?? callerName;
+                callerAvatar = (data['callerAvatar'] as String?) ?? callerAvatar;
+              }
+            } catch (_) {}
+            if (channelName == null || channelName.isEmpty) {
+              try {
+                final rtdb = FirebaseDatabase.instance;
+                final snap = await rtdb.ref('calls/$callId').get();
+                if (snap.exists) {
+                  final m = Map<String, dynamic>.from(snap.value as Map);
+                  channelName = (m['channelName'] as String?) ?? channelName;
+                  callerName = (m['callerName'] as String?) ?? callerName;
+                  callerAvatar = (m['callerAvatar'] as String?) ?? callerAvatar;
+                }
+              } catch (_) {}
+            }
+          }
+
+          if (channelName != null) {
+            videoCallBloc.add(AcceptCall(callId));
+            videoCallBloc.add(MonitorCallStatus(callId));
+            videoCallBloc.add(InitializeVideoCall(
+              channelName: channelName,
+              token: AgoraConfig.tempToken,
+              uid: '',
+            ));
+            videoCallBloc.add(JoinVideoCall());
+
+            navigatorKey.currentState?.push(
+              MaterialPageRoute(
+                builder: (_) => BlocProvider.value(
+                  value: videoCallBloc,
+                  child: CallingScreen(
+                    callerName: callerName,
+                    callerAvatar: callerAvatar,
+                    isMuted: false,
+                    isCameraOff: false,
+                    isFrontCamera: true,
+                    onToggleMute: () => videoCallBloc.add(ToggleMute()),
+                    onToggleCamera: () => videoCallBloc.add(ToggleVideo()),
+                    onSwitchCamera: () => videoCallBloc.add(SwitchCamera()),
+                    onHangUp: () {
+                      videoCallBloc.add(LeaveVideoCall());
+                      navigatorKey.currentState?.pop();
+                    },
+                  ),
+                ),
+              ),
+            );
+          }
+        } else if (action == 'decline') {
+          videoCallBloc.add(RejectCall(callId));
+        }
       }
     });
 
@@ -123,6 +197,7 @@ class MyApp extends StatelessWidget {
       child: BlocProvider<VideoCallBloc>(
         create: (context) => videoCallBloc,
         child: MaterialApp(
+          navigatorKey: navigatorKey,
           title: 'Vietravel',
           theme: AppThemes.lightTheme,
           darkTheme: AppThemes.darkTheme,
@@ -143,6 +218,17 @@ class MyApp extends StatelessWidget {
                   RegisterBloc(RepositoryProvider.of<FirebaseAuthRepository>(context)),
               child: const RegisterPage(),
             ),
+            '/agora_host_page': (context) => BlocProvider(
+              create: (context) => livestream.AgoraHostBloc(livestream.AgoraRepositoryImpl(livestream.AgoraService())),
+              child: const livestream.AgoraHostPage(),
+            ),
+            '/agora_viewer_page': (context) {
+              final args = ModalRoute.of(context)!.settings.arguments as String?;
+              return BlocProvider(
+                create: (context) => livestream.AgoraViewerBloc(livestream.AgoraRepositoryImpl(livestream.AgoraService())),
+                child: livestream.AgoraViewerPage(channelName: args ?? 'livestream'),
+              );
+            },
           },
         ),
       ),
