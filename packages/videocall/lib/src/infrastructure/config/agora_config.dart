@@ -6,7 +6,7 @@ class AgoraConfig {
 
   // Temporary token for testing (expires after 24 hours)
   // Generated for channel: video_call
-  static const String tempToken = '007eJxTYGjYtuS6QEnTw98XLW6vPui1yMzL+IaofFnwweJqpuNr59QoMKQkGyabpRkYmJskJ5lYJqVaGBilpqRYmqamJpuaGpoZqlkYZjYEMjLY2MkyMTJAIIjPxVCWmZKaH5+cmJPDwAAAVaghSQ==';
+  static const String tempToken = '007eJxTYFgSbM+8lVOoK6j+0J2lXL+vf9/5uts6Ll5/d43u/4cver8rMKQkGyabpRkYmJskJ5lYJqVaGBilpqRYmqamJpuaGpoZWsoYZzYEMjLsN4tjYmSAQBCfi6EsMyU1Pz45MSeHgQEAioMi6g==';
 
   // Test channel name for development
   static const String testChannelName = 'video_call';
