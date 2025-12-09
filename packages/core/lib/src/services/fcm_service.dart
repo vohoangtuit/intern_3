@@ -40,6 +40,7 @@ class FCMService {
       _firebaseMessaging.onTokenRefresh.listen((newToken) {
         _fcmToken = newToken;
       });
+     // print("✅ _fcmToken : $_fcmToken");
 
       // Setup message handlers
       _setupMessageHandlers();

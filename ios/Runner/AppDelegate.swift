@@ -1,6 +1,7 @@
 import Flutter
 import UIKit
-
+import Firebase
+import UserNotifications
 @main
 @objc class AppDelegate: FlutterAppDelegate {
   override func application(
@@ -8,6 +9,9 @@ import UIKit
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
     GeneratedPluginRegistrant.register(with: self)
+      DispatchQueue.main.async {
+          UNUserNotificationCenter.current().delegate = self
+      }
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 }
