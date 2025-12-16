@@ -43,3 +43,6 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+/assets/services/AuthKey_8LJ77K4272.p8
+/assets/services/firebase_services.json
+/assets/services/
